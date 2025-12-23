@@ -1,13 +1,12 @@
-from __future__ import annotations
-
 """
-Hand‑specific state and command data structures.
+Hand-specific state and command data structures.
 
 These mirror the C++ `PyHand*` structs exposed via the pybind11 module.
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass
-from typing import List
 
 from .constants import DEX3_NUM_MOTORS, DEX3_NUM_PRESS_SENSORS
 
@@ -17,26 +16,26 @@ class HandMotorState:
     """Dex3 hand motor state."""
 
     # Joint positions [rad]
-    q: List[float]
+    q: list[float]
     # Joint velocities [rad/s]
-    dq: List[float]
+    dq: list[float]
     # Estimated joint torques [N*m]
-    tau_est: List[float]
+    tau_est: list[float]
     # Two temperature channels per motor (e.g. winding / driver)
-    temperature: List[List[float]]
+    temperature: list[list[float]]
     # Motor voltages [V]
-    voltage: List[float]
+    voltage: list[float]
 
 
 @dataclass
 class HandMotorCommand:
     """Dex3 hand motor command."""
 
-    q_target: List[float]
-    dq_target: List[float]
-    kp: List[float]
-    kd: List[float]
-    tau_ff: List[float]
+    q_target: list[float]
+    dq_target: list[float]
+    kp: list[float]
+    kd: list[float]
+    tau_ff: list[float]
 
 
 @dataclass
@@ -44,21 +43,21 @@ class HandPressSensorState:
     """Dex3 finger pressure sensor array state."""
 
     # Shape: [DEX3_NUM_PRESS_SENSORS, 12]
-    pressure: List[List[float]]
-    temperature: List[List[float]]
-    lost: List[int]
+    pressure: list[list[float]]
+    temperature: list[list[float]]
+    lost: list[int]
     # Reserve values, 4 uint32 per sensor
-    reserve: List[List[int]]
+    reserve: list[list[int]]
 
 
 @dataclass
 class HandImuState:
     """Dex3 hand IMU state."""
 
-    quaternion: List[float]
-    gyroscope: List[float]
-    accelerometer: List[float]
-    rpy: List[float]
+    quaternion: list[float]
+    gyroscope: list[float]
+    accelerometer: list[float]
+    rpy: list[float]
     temperature: float
 
 
@@ -73,8 +72,8 @@ class HandState:
     power_a: float
     system_v: float
     device_v: float
-    error: List[int]
-    reserve: List[int]
+    error: list[int]
+    reserve: list[int]
 
 
 def empty_hand_motor_state() -> HandMotorState:
@@ -125,13 +124,13 @@ def empty_hand_state() -> HandState:
 
 
 __all__ = [
-    "HandMotorState",
-    "HandMotorCommand",
-    "HandPressSensorState",
     "HandImuState",
+    "HandMotorCommand",
+    "HandMotorState",
+    "HandPressSensorState",
     "HandState",
+    "empty_hand_imu_state",
     "empty_hand_motor_state",
     "empty_hand_press_sensor_state",
-    "empty_hand_imu_state",
     "empty_hand_state",
 ]

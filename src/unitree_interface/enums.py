@@ -33,8 +33,8 @@ class HandType(Enum):
 class ControlMode(Enum):
     """Control mode for robots."""
 
-    PR = 0  # Pitch/Roll mode
-    AB = 1  # A/B mode
+    PR = 0  # Series Control for Pitch/Roll Joints
+    AB = 1  # Parallel Control for A/B Joints
 
 
 __all__ = ["ControlMode", "HandType", "MessageType", "RobotType"]

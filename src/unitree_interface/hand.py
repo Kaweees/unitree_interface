@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """
 High-level Dex3 HandInterface facade.
 
@@ -14,8 +12,9 @@ The actual low-level communication is expected to be provided by a C++/DDS
 backend; this module focuses on the public Python surface and helpers.
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass
-from typing import Tuple, List
 
 from .constants import (
     DEX3_NUM_MOTORS,
@@ -31,7 +30,6 @@ from .hand_state import (
     HandState,
     empty_hand_state,
 )
-
 
 # Joint limits for Dex3-1 hands (match the C++ implementation)
 LEFT_HAND_MAX_LIMITS = (
@@ -140,11 +138,11 @@ class HandInterface:
             cmd.q_target = list(DEFAULT_RIGHT_HAND_POSE)
         return cmd
 
-    def get_default_kp(self) -> List[float]:
+    def get_default_kp(self) -> list[float]:
         """Get default proportional gains for all joints."""
         return list(self._default_kp)
 
-    def get_default_kd(self) -> List[float]:
+    def get_default_kd(self) -> list[float]:
         """Get default derivative gains for all joints."""
         return list(self._default_kd)
 
@@ -155,19 +153,19 @@ class HandInterface:
         """Get the hand name string."""
         return self._hand_name
 
-    def get_max_limits(self) -> List[float]:
+    def get_max_limits(self) -> list[float]:
         """Get maximum joint angle limits."""
         if self.hand_type is HandType.LEFT_HAND:
             return list(LEFT_HAND_MAX_LIMITS)
         return list(RIGHT_HAND_MAX_LIMITS)
 
-    def get_min_limits(self) -> List[float]:
+    def get_min_limits(self) -> list[float]:
         """Get minimum joint angle limits."""
         if self.hand_type is HandType.LEFT_HAND:
             return list(LEFT_HAND_MIN_LIMITS)
         return list(RIGHT_HAND_MIN_LIMITS)
 
-    def clamp_joint_angles(self, joint_angles: List[float]) -> None:
+    def clamp_joint_angles(self, joint_angles: list[float]) -> None:
         """
         Clamp joint angles to valid range in-place.
 
@@ -181,13 +179,13 @@ class HandInterface:
             x = joint_angles[i]
             joint_angles[i] = lo if x < lo else hi if x > hi else x
 
-    def normalize_joint_angles(self, joint_angles: List[float]) -> List[float]:
+    def normalize_joint_angles(self, joint_angles: list[float]) -> list[float]:
         """
         Normalize joint angles to [0, 1] range based on joint limits.
         """
         max_limits = self.get_max_limits()
         min_limits = self.get_min_limits()
-        out: List[float] = [0.0] * DEX3_NUM_MOTORS
+        out: list[float] = [0.0] * DEX3_NUM_MOTORS
         for i in range(min(len(joint_angles), DEX3_NUM_MOTORS)):
             lo = min_limits[i]
             hi = max_limits[i]
@@ -208,12 +206,12 @@ class HandInterface:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def create_left_hand(network_interface: str, re_init: bool = True) -> "HandInterface":
+    def create_left_hand(network_interface: str, re_init: bool = True) -> HandInterface:
         """Create a left hand interface."""
         return HandInterface(network_interface=network_interface, hand_type=HandType.LEFT_HAND, re_init=re_init)
 
     @staticmethod
-    def create_right_hand(network_interface: str, re_init: bool = True) -> "HandInterface":
+    def create_right_hand(network_interface: str, re_init: bool = True) -> HandInterface:
         """Create a right hand interface."""
         return HandInterface(network_interface=network_interface, hand_type=HandType.RIGHT_HAND, re_init=re_init)
 
@@ -227,7 +225,7 @@ def create_hand(network_interface: str, hand_type: HandType, re_init: bool = Tru
     return HandInterface.create_right_hand(network_interface, re_init=re_init)
 
 
-def create_dual_hands(network_interface: str, re_init: bool = True) -> Tuple[HandInterface, HandInterface]:
+def create_dual_hands(network_interface: str, re_init: bool = True) -> tuple[HandInterface, HandInterface]:
     """
     Create both left and right hand interfaces.
 
@@ -242,16 +240,13 @@ def create_dual_hands(network_interface: str, re_init: bool = True) -> Tuple[Han
 
 
 __all__ = [
-    "HandInterface",
-    "create_hand",
-    "create_dual_hands",
+    "DEX3_NUM_MOTORS",
+    "DEX3_NUM_PRESS_SENSORS",
     "LEFT_HAND_CMD_TOPIC",
     "LEFT_HAND_STATE_TOPIC",
     "RIGHT_HAND_CMD_TOPIC",
     "RIGHT_HAND_STATE_TOPIC",
-    "DEX3_NUM_MOTORS",
-    "DEX3_NUM_PRESS_SENSORS",
+    "HandInterface",
+    "create_dual_hands",
+    "create_hand",
 ]
-
-
-

@@ -8,14 +8,17 @@ actually talk to hardware are left unimplemented for now.
 from __future__ import annotations
 
 from unitree_sdk2py.core.channel import (
+    ChannelFactoryDestroy,
     ChannelFactoryInitialize,
     ChannelPublisher,
     ChannelSubscriber,
 )
 from unitree_sdk2py.idl.unitree_go.msg.dds_ import LowCmd_ as LowCmd_GO2
 from unitree_sdk2py.idl.unitree_go.msg.dds_ import LowState_ as LowState_GO2
+from unitree_sdk2py.idl.unitree_go.msg.dds_ import WirelessController_
 from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowCmd_ as LowCmd_HG
 from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowState_ as LowState_HG
+from unitree_sdk2py.utils.crc import CRC
 
 from .config import RobotConfig
 from .constants import (
@@ -26,9 +29,10 @@ from .constants import (
     H1_NUM_MOTOR,
     HG_CMD_TOPIC,
     HG_STATE_TOPIC,
+    TOPIC_JOYSTICK,
 )
 from .enums import ControlMode, MessageType, RobotType
-from .state import LowState, MotorCommand, WirelessController
+from .state import ImuState, LowState, MotorCommand, MotorState, WirelessController
 
 
 class UnitreeInterface:
@@ -57,12 +61,44 @@ class UnitreeInterface:
         self._control_mode: ControlMode = ControlMode.PR
         self._default_kp: list[float] = self._get_default_kp()
         self._default_kd: list[float] = self._get_default_kd()
-        self._initalize_dds()
+        # State storage
+        self._motor_state: MotorState = MotorState(
+            q=[0.0] * self._config.num_motors,
+            dq=[0.0] * self._config.num_motors,
+            tau_est=[0.0] * self._config.num_motors,
+            temperature=[0] * self._config.num_motors,
+            voltage=[0.0] * self._config.num_motors,
+        )
+        self._motor_command: MotorCommand = MotorCommand(
+            q_target=[0.0] * self._config.num_motors,
+            dq_target=[0.0] * self._config.num_motors,
+            kp=self._default_kp.copy(),
+            kd=self._default_kd.copy(),
+            tau_ff=[0.0] * self._config.num_motors,
+        )
+        self._imu_state: ImuState = ImuState(
+            rpy=[0.0, 0.0, 0.0],
+            omega=[0.0, 0.0, 0.0],
+            quat=[0.0, 0.0, 0.0, 0.0],
+            accel=[0.0, 0.0, 0.0],
+        )
+        self._mode_machine: int = 0
+        self._initialize_dds()
+        self._wireless_controller: WirelessController = WirelessController(
+            lx=0.0,
+            ly=0.0,
+            rx=0.0,
+            ry=0.0,
+            keys=0,
+        )
+        self._crc = CRC()
 
     def __del__(self) -> None:
         """Destroy UnitreeInterface."""
         self._low_state_subscriber.Destroy()
         self._low_cmd_publisher.Destroy()
+        self._wireless_subscriber.Destroy()
+        ChannelFactoryDestroy()
 
     @staticmethod
     def _derive_robot_name(robot_type: RobotType, message_type: MessageType) -> str:
@@ -81,15 +117,42 @@ class UnitreeInterface:
 
     def read_low_state(self) -> LowState:
         """Read current robot low state."""
-        raise NotImplementedError("Low-level I/O must be provided by a backend implementation.")
+        return LowState(
+            motor=self._motor_state,
+            imu=self._imu_state,
+            mode_machine=self._mode_machine,
+        )
 
     def read_wireless_controller(self) -> WirelessController:
         """Read current wireless controller state."""
-        raise NotImplementedError("Low-level I/O must be provided by a backend implementation.")
+        return self._wireless_controller
 
-    def write_low_command(self, command: MotorCommand) -> None:
+    def write_motor_command(self) -> None:
         """Write motor command to robot."""
-        raise NotImplementedError("Low-level I/O must be provided by a backend implementation.")
+        # Create DDS message object on-the-fly
+        match self._config.message_type:
+            case MessageType.HG:
+                low_cmd: LowCmd_HG = LowCmd_HG()
+            case MessageType.GO2:
+                low_cmd: LowCmd_GO2 = LowCmd_GO2()
+
+        # Convert MotorCommand to DDS message format
+        low_cmd.mode_pr = self._control_mode.value
+        low_cmd.mode_machine = self._mode_machine
+
+        for i in range(self._config.num_motors):
+            low_cmd.motor_cmd[i].mode = 1  # 1:Enable, 0:Disable
+            low_cmd.motor_cmd[i].q = self._motor_command.q_target[i]
+            low_cmd.motor_cmd[i].dq = self._motor_command.dq_target[i]
+            low_cmd.motor_cmd[i].kp = self._motor_command.kp[i]
+            low_cmd.motor_cmd[i].kd = self._motor_command.kd[i]
+            low_cmd.motor_cmd[i].tau = self._motor_command.tau_ff[i]
+
+        # Calculate and set CRC
+        low_cmd.crc = self._crc.Crc(low_cmd)
+
+        # Publish the command
+        self._low_cmd_publisher.Write(low_cmd)
 
     def set_control_mode(self, mode: ControlMode) -> None:
         """Set control mode (PR or AB)."""
@@ -143,39 +206,77 @@ class UnitreeInterface:
         """Get default velocity gains."""
         return [1.0] * self._config.num_motors
 
-    def _initalize_dds(self) -> None:
-        """Initialize DDS publisher."""
+    def _initialize_dds(self) -> None:
+        """Initialize DDS publisher and subscriber."""
         # Initialize the DDS factory
         ChannelFactoryInitialize(self._domain_id, self._network_interface)
 
         if self._config.message_type == MessageType.HG:
             # HG message type
             self._low_state_subscriber = ChannelSubscriber(HG_STATE_TOPIC, LowState_HG)
-            self._low_state_subscriber.Init()
+            self._low_state_subscriber.Init(
+                self.LowStateHandler,
+                10,  # Queue size
+            )
             self._low_cmd_publisher = ChannelPublisher(HG_CMD_TOPIC, LowCmd_HG)
             self._low_cmd_publisher.Init()
         else:
             # GO2 message type
             self._low_state_subscriber = ChannelSubscriber(GO2_STATE_TOPIC, LowState_GO2)
-            self._low_state_subscriber.Init()
+            self._low_state_subscriber.Init(
+                self.LowStateHandler,
+                10,  # Queue size
+            )
             self._low_cmd_publisher = ChannelPublisher(GO2_CMD_TOPIC, LowCmd_GO2)
             self._low_cmd_publisher.Init()
+        # Wireless controller subscriber (same for both message types)
+        self._wireless_subscriber = ChannelSubscriber(TOPIC_JOYSTICK, WirelessController_)
+        self._wireless_subscriber.Init(
+            self.WirelessControllerHandler,
+            10,  # Queue size
+        )
 
-    # ------------------------------------------------------------------
-    # Configuration accessors
-    # ------------------------------------------------------------------
+    def LowStateHandler(self, state: LowState_HG | LowState_GO2) -> None:
+        """Handle low state message."""
+        match self._config.message_type:
+            case MessageType.HG:
+                low_state: LowState_HG = state  # type: ignore[assignment]
+                self._process_low_state(low_state)
+            case MessageType.GO2:
+                low_state: LowState_GO2 = state  # type: ignore[assignment]
+                self._process_low_state(low_state)
 
-    def get_config(self) -> RobotConfig:
-        """Get robot configuration."""
-        return self._config
+    def _process_low_state(self, low_state: LowState_HG | LowState_GO2) -> None:
+        """Process low state message."""
+        # Get motor state
+        motor_states = low_state.motor_state()
+        for i in range(self._config.num_motors):
+            self._motor_state.q[i] = motor_states[i].q()
+            self._motor_state.dq[i] = motor_states[i].dq()
+            self._motor_state.tau_est[i] = motor_states[i].tau_est()
+            self._motor_state.temperature[i] = motor_states[i].temperature()[0]
+            self._motor_state.voltage[i] = motor_states[i].vol()
 
-    def get_num_motors(self) -> int:
-        """Get number of motors."""
-        return self._config.num_motors
+        # Get IMU state
+        imu_state = low_state.imu_state()
+        self._imu_state.omega = list(imu_state.gyroscope())
+        self._imu_state.rpy = list(imu_state.rpy())
+        self._imu_state.quat = list(imu_state.quaternion())
+        self._imu_state.accel = list(imu_state.accelerometer())
 
-    def get_robot_name(self) -> str:
-        """Get robot name."""
-        return self._config.name
+        # Update mode machine
+        if self._config.message_type == MessageType.HG and self._mode_machine != low_state.mode_machine():
+            if self._mode_machine == 0:
+                print(f"{self._config.name} type: {low_state.mode_machine()}")
+            self._mode_machine = low_state.mode_machine()
+
+    def WirelessControllerHandler(self, message: WirelessController_) -> None:
+        """Handle wireless controller message."""
+        self._wireless_controller.lx = message.lx()
+        self._wireless_controller.ly = message.ly()
+        self._wireless_controller.rx = message.rx()
+        self._wireless_controller.ry = message.ry()
+        self._wireless_controller.keys = message.keys()
 
     # ------------------------------------------------------------------
     # Alternate constructors
@@ -184,12 +285,14 @@ class UnitreeInterface:
     @staticmethod
     def create_custom(
         network_interface: str,
+        domain_id: int,
         num_motors: int,
         message_type: MessageType,
     ) -> UnitreeInterface:
         """Create custom robot interface."""
         return UnitreeInterface(
             network_interface,
+            domain_id,
             config=RobotConfig(
                 robot_type=RobotType.CUSTOM,
                 message_type=message_type,

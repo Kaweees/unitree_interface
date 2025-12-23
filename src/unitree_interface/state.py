@@ -57,6 +57,19 @@ class MotorCommand:
 class WirelessController:
     """Wireless controller state."""
 
+    # Left stick
+    lx: float
+    ly: float
+    # Right stick
+    rx: float
+    ry: float
+    keys: int
+
+
+@dataclass
+class JoystickState:
+    """Joystick state."""
+
     # Left stick [x, y] (2 elements)
     left_stick: list[float]
     # Right stick [x, y] (2 elements)
