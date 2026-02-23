@@ -3,15 +3,23 @@ requires = ["uv_build"]
 build-backend = "uv_build"
 
 [project]
-name = "unitree_interface"
+name = "unitree-interface"
 version = "0.0.2"
-description = "A unified, robot-agnostic interface for fetching observations from Unitree and Booster platforms."
+description = "A unified, robot-agnostic interface for fetching observations from Unitree platforms."
 authors = [
   { name = "Miguel Villa Floran", email = "miguel.villafloran@gmail.com" },
 ]
-requires-python = ">=3.11"
+requires-python = ">=3.11,<3.13"
 readme = "README.md"
 license = { file = "LICENSE" }
+keywords = ["robotics", "unitree", "quadruped", "humanoid"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+]
 
 dependencies = ["unitree-sdk2py"]
 
@@ -19,4 +27,4 @@ dependencies = ["unitree-sdk2py"]
 unitree-sdk2py = { git = "https://github.com/Kaweees/unitree_sdk2_python.git", branch = "main" }
 
 [dependency-groups]
-dev = ["pre-commit", "ipykernel"]
+dev = ["ipykernel", "pre-commit"]
